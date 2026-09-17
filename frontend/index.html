@@ -1,0 +1,422 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>DeepFake Face Detector</title>
+<style>
+  :root {
+    --bg: #0f1115;
+    --panel: #171a21;
+    --panel-border: #262b36;
+    --text: #e8eaed;
+    --text-dim: #9aa0ac;
+    --accent: #5b8cff;
+    --real: #37c977;
+    --fake: #ff5c66;
+    --radius: 14px;
+  }
+
+  * { box-sizing: border-box; }
+
+  body {
+    margin: 0;
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+    background: var(--bg);
+    color: var(--text);
+    min-height: 100vh;
+    padding: 24px 16px 60px;
+  }
+
+  .wrap {
+    max-width: 920px;
+    margin: 0 auto;
+  }
+
+  header {
+    text-align: center;
+    margin-bottom: 28px;
+  }
+
+  header h1 {
+    font-size: 1.6rem;
+    margin: 0 0 6px;
+  }
+
+  header p {
+    color: var(--text-dim);
+    margin: 0;
+    font-size: 0.95rem;
+  }
+
+  #status-banner {
+    display: none;
+    background: #3a2430;
+    border: 1px solid #63313f;
+    color: #ffb4bd;
+    padding: 10px 14px;
+    border-radius: 10px;
+    font-size: 0.85rem;
+    margin-bottom: 18px;
+    text-align: center;
+  }
+
+  #dropzone {
+    border: 2px dashed var(--panel-border);
+    border-radius: var(--radius);
+    background: var(--panel);
+    padding: 40px 20px;
+    text-align: center;
+    cursor: pointer;
+    transition: border-color 0.15s ease, background 0.15s ease;
+  }
+
+  #dropzone.dragover {
+    border-color: var(--accent);
+    background: #1b2030;
+  }
+
+  #dropzone p {
+    margin: 8px 0 0;
+    color: var(--text-dim);
+  }
+
+  #dropzone .icon {
+    font-size: 2rem;
+  }
+
+  #file-input { display: none; }
+
+  #choose-btn {
+    background: var(--accent);
+    color: #fff;
+    border: none;
+    padding: 9px 18px;
+    border-radius: 8px;
+    font-size: 0.9rem;
+    cursor: pointer;
+    margin-top: 14px;
+  }
+
+  #choose-btn:hover { filter: brightness(1.08); }
+
+  #loading {
+    display: none;
+    align-items: center;
+    justify-content: center;
+    gap: 10px;
+    margin: 24px 0;
+    color: var(--text-dim);
+  }
+
+  .spinner {
+    width: 18px;
+    height: 18px;
+    border: 2px solid var(--panel-border);
+    border-top-color: var(--accent);
+    border-radius: 50%;
+    animation: spin 0.8s linear infinite;
+  }
+
+  @keyframes spin { to { transform: rotate(360deg); } }
+
+  #results {
+    display: none;
+    margin-top: 28px;
+  }
+
+  .verdict {
+    text-align: center;
+    margin-bottom: 20px;
+  }
+
+  .verdict .label {
+    display: inline-block;
+    padding: 8px 22px;
+    border-radius: 999px;
+    font-size: 1.3rem;
+    font-weight: 700;
+    letter-spacing: 0.03em;
+    text-transform: uppercase;
+  }
+
+  .verdict .label.real { background: rgba(55, 201, 119, 0.15); color: var(--real); }
+  .verdict .label.fake { background: rgba(255, 92, 102, 0.15); color: var(--fake); }
+
+  .verdict .latency {
+    display: block;
+    color: var(--text-dim);
+    font-size: 0.8rem;
+    margin-top: 8px;
+  }
+
+  .images {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 16px;
+    margin-bottom: 22px;
+  }
+
+  @media (max-width: 560px) {
+    .images { grid-template-columns: 1fr; }
+  }
+
+  .img-card {
+    background: var(--panel);
+    border: 1px solid var(--panel-border);
+    border-radius: var(--radius);
+    padding: 12px;
+    text-align: center;
+  }
+
+  .img-card h3 {
+    margin: 0 0 10px;
+    font-size: 0.8rem;
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+    color: var(--text-dim);
+    font-weight: 600;
+  }
+
+  .img-card img {
+    width: 100%;
+    border-radius: 8px;
+    display: block;
+    aspect-ratio: 1 / 1;
+    object-fit: cover;
+    background: #000;
+  }
+
+  .probs {
+    background: var(--panel);
+    border: 1px solid var(--panel-border);
+    border-radius: var(--radius);
+    padding: 18px 20px;
+  }
+
+  .prob-row { margin-bottom: 14px; }
+  .prob-row:last-child { margin-bottom: 0; }
+
+  .prob-row-label {
+    display: flex;
+    justify-content: space-between;
+    font-size: 0.85rem;
+    margin-bottom: 6px;
+    color: var(--text-dim);
+  }
+
+  .prob-row-label strong { color: var(--text); }
+
+  .bar-track {
+    height: 8px;
+    border-radius: 999px;
+    background: #262b36;
+    overflow: hidden;
+  }
+
+  .bar-fill {
+    height: 100%;
+    border-radius: 999px;
+    transition: width 0.4s ease;
+  }
+
+  .bar-fill.real { background: var(--real); }
+  .bar-fill.fake { background: var(--fake); }
+
+  #reset-btn {
+    display: block;
+    margin: 24px auto 0;
+    background: transparent;
+    border: 1px solid var(--panel-border);
+    color: var(--text-dim);
+    padding: 8px 16px;
+    border-radius: 8px;
+    font-size: 0.85rem;
+    cursor: pointer;
+  }
+
+  #reset-btn:hover { color: var(--text); border-color: var(--accent); }
+
+  footer {
+    text-align: center;
+    color: var(--text-dim);
+    font-size: 0.75rem;
+    margin-top: 40px;
+  }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <header>
+    <h1>DeepFake Face Detector</h1>
+    <p>Upload a face photo to check whether it's real or AI-generated, with a Grad-CAM heatmap showing what the model looked at.</p>
+  </header>
+
+  <div id="status-banner"></div>
+
+  <div id="dropzone">
+    <div class="icon">📷</div>
+    <p>Drag &amp; drop an image here</p>
+    <button id="choose-btn" type="button">Choose File</button>
+    <input id="file-input" type="file" accept="image/*" />
+  </div>
+
+  <div id="loading">
+    <div class="spinner"></div>
+    <span>Analyzing image…</span>
+  </div>
+
+  <div id="results">
+    <div class="verdict">
+      <span id="verdict-label" class="label"></span>
+      <span id="latency" class="latency"></span>
+    </div>
+
+    <div class="images">
+      <div class="img-card">
+        <h3>Original</h3>
+        <img id="original-img" alt="Uploaded image" />
+      </div>
+      <div class="img-card">
+        <h3>Grad-CAM Heatmap</h3>
+        <img id="heatmap-img" alt="Grad-CAM heatmap" />
+      </div>
+    </div>
+
+    <div class="probs">
+      <div class="prob-row">
+        <div class="prob-row-label"><span>Real</span><strong id="real-pct">0%</strong></div>
+        <div class="bar-track"><div id="real-bar" class="bar-fill real" style="width:0%"></div></div>
+      </div>
+      <div class="prob-row">
+        <div class="prob-row-label"><span>Fake</span><strong id="fake-pct">0%</strong></div>
+        <div class="bar-track"><div id="fake-bar" class="bar-fill fake" style="width:0%"></div></div>
+      </div>
+    </div>
+
+    <button id="reset-btn" type="button">Try another image</button>
+  </div>
+
+  <footer>Detection tool trained on StyleGAN-generated faces — not a guarantee against all deepfake generators.</footer>
+</div>
+
+<script>
+  const dropzone = document.getElementById("dropzone");
+  const fileInput = document.getElementById("file-input");
+  const chooseBtn = document.getElementById("choose-btn");
+  const loading = document.getElementById("loading");
+  const results = document.getElementById("results");
+  const statusBanner = document.getElementById("status-banner");
+  const resetBtn = document.getElementById("reset-btn");
+
+  const originalImg = document.getElementById("original-img");
+  const heatmapImg = document.getElementById("heatmap-img");
+  const verdictLabel = document.getElementById("verdict-label");
+  const latencyEl = document.getElementById("latency");
+  const realPct = document.getElementById("real-pct");
+  const fakePct = document.getElementById("fake-pct");
+  const realBar = document.getElementById("real-bar");
+  const fakeBar = document.getElementById("fake-bar");
+
+  chooseBtn.addEventListener("click", () => fileInput.click());
+  dropzone.addEventListener("click", (e) => {
+    if (e.target !== chooseBtn) fileInput.click();
+  });
+
+  fileInput.addEventListener("change", () => {
+    if (fileInput.files.length) handleFile(fileInput.files[0]);
+  });
+
+  ["dragenter", "dragover"].forEach((evt) =>
+    dropzone.addEventListener(evt, (e) => {
+      e.preventDefault();
+      dropzone.classList.add("dragover");
+    })
+  );
+
+  ["dragleave", "drop"].forEach((evt) =>
+    dropzone.addEventListener(evt, (e) => {
+      e.preventDefault();
+      dropzone.classList.remove("dragover");
+    })
+  );
+
+  dropzone.addEventListener("drop", (e) => {
+    const file = e.dataTransfer.files[0];
+    if (file) handleFile(file);
+  });
+
+  resetBtn.addEventListener("click", () => {
+    results.style.display = "none";
+    dropzone.style.display = "block";
+    hideBanner();
+    fileInput.value = "";
+  });
+
+  function showBanner(message) {
+    statusBanner.textContent = message;
+    statusBanner.style.display = "block";
+  }
+
+  function hideBanner() {
+    statusBanner.style.display = "none";
+  }
+
+  async function handleFile(file) {
+    hideBanner();
+
+    if (!file.type.startsWith("image/")) {
+      showBanner("Please upload an image file.");
+      return;
+    }
+    if (file.size > 10 * 1024 * 1024) {
+      showBanner("File too large. Maximum size is 10 MB.");
+      return;
+    }
+
+    originalImg.src = URL.createObjectURL(file);
+
+    dropzone.style.display = "none";
+    results.style.display = "none";
+    loading.style.display = "flex";
+
+    const formData = new FormData();
+    formData.append("file", file);
+
+    try {
+      const res = await fetch("/predict", { method: "POST", body: formData });
+      const data = await res.json();
+
+      if (!res.ok) {
+        throw new Error(data.detail || "Prediction failed.");
+      }
+
+      renderResult(data);
+    } catch (err) {
+      showBanner(err.message || "Something went wrong. Please try again.");
+      dropzone.style.display = "block";
+    } finally {
+      loading.style.display = "none";
+    }
+  }
+
+  function renderResult(data) {
+    const isReal = data.label === "real";
+    verdictLabel.textContent = isReal ? "Real" : "Fake";
+    verdictLabel.className = "label " + (isReal ? "real" : "fake");
+    latencyEl.textContent = `${Math.round(data.confidence * 100)}% confidence · ${data.latency_ms} ms`;
+
+    heatmapImg.src = "data:image/png;base64," + data.heatmap_base64;
+
+    const realP = data.probabilities.real ?? 0;
+    const fakeP = data.probabilities.fake ?? 0;
+    realPct.textContent = Math.round(realP * 100) + "%";
+    fakePct.textContent = Math.round(fakeP * 100) + "%";
+    realBar.style.width = Math.round(realP * 100) + "%";
+    fakeBar.style.width = Math.round(fakeP * 100) + "%";
+
+    results.style.display = "block";
+  }
+</script>
+</body>
+</html>

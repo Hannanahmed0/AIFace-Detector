@@ -1,0 +1,25 @@
+# Trained weights (large binary, not meant for git history)
+models/*.pth
+
+# Data
+data/
+
+# Python
+.venv/
+venv/
+__pycache__/
+*.pyc
+.pytest_cache/
+
+# Env / secrets
+.env
+kaggle.json
+
+# OS / editor
+.DS_Store
+Thumbs.db
+.vscode/
+.idea/
+
+# Claude Code local session state
+.claude/
